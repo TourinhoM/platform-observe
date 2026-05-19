@@ -1,0 +1,48 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: postgres-rules
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: alerts
+    # release=monitoring e o ruleSelector do kube-prometheus-stack.
+    release: monitoring
+spec:
+  groups:
+    - name: postgres.health
+      interval: 30s
+      rules:
+        # pg_up: gauge do exporter. 1 = exporter conectou OK no DB,
+        # 0 = exporter rodando mas falhou conexao. `absent()` cobre
+        # exporter caido (sem metrica nenhuma).
+        - alert: PostgresDown
+          expr: |
+            pg_up == 0 or absent(pg_up)
+          for: 2m
+          labels:
+            severity: critical
+            scope: database
+          annotations:
+            summary: 'Postgres inacessivel ha mais de 2min'
+            description: |
+              pg_up == 0 (exporter rodando mas falhou conexao), OU
+              metrica ausente (exporter down). Investigar:
+                kubectl -n infra get pod -l app.kubernetes.io/name=postgresql
+                kubectl -n infra logs postgresql-0 -c postgres-exporter
+
+        # Ratio de uso vs max_connections do server. Postgres recusa
+        # novas conexoes quando max_connections atinge — quebra todos
+        # os clients downstream (Keycloak primeiro).
+        - alert: PostgresTooManyConnections
+          expr: |
+            sum(pg_stat_database_numbackends) / max(pg_settings_max_connections) * 100 > 80
+          for: 5m
+          labels:
+            severity: warning
+            scope: database
+          annotations:
+            summary: 'Postgres com mais de 80% das connection slots ocupados'
+            description: |
+              {{ $value | printf "%.1f" }}% das connections slots em uso ha mais
+              de 5min. Investigar leak de conexao em clients (Keycloak,
+              outras apps) ou aumentar max_connections (configmap-postgresql).

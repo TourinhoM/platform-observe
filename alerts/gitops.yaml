@@ -1,0 +1,55 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: gitops-rules
+  labels:
+    app.kubernetes.io/name: argocd
+    app.kubernetes.io/component: alerts
+    # release=monitoring e o ruleSelector do kube-prometheus-stack.
+    release: monitoring
+spec:
+  groups:
+    - name: gitops.argocd
+      interval: 30s
+      rules:
+        # Cobre via "saude do Application" qualquer causa de unhealthy:
+        # CrashLoopBackOff, ImagePullBackOff, Pod evicted, workload Failed.
+        # Em vez de 1 alert por causa, 1 alert por efeito final.
+        - alert: ArgoCDAppDegraded
+          expr: |
+            argocd_app_info{health_status="Degraded"} == 1
+          for: 5m
+          labels:
+            severity: warning
+            scope: gitops
+          annotations:
+            summary: 'Argo CD app {{ $labels.name }} Degraded'
+            description: |
+              Application Argo CD {{ $labels.name }} (project: {{ $labels.project }},
+              dest_namespace: {{ $labels.dest_namespace }}) esta Degraded ha mais
+              de 5min. Causa comum: workload nao Healthy.
+              Investigar:
+                kubectl -n argocd get application {{ $labels.name }} -o yaml
+                kubectl -n {{ $labels.dest_namespace }} get pods
+
+        # Drift permanente. Tolerance de 1h evita ruido durante deploys
+        # normais (sync demora segundos a minutos). Pega:
+        # - CRD com schema dinamico que o controller externo modifica
+        # - Auto-sync desabilitado e ninguem sincronizou
+        # - Conflito de owner entre Operators (caso real: 2 Operators do
+        #   Keycloak brigando pelo Service)
+        - alert: ArgoCDAppOutOfSyncChronic
+          expr: |
+            argocd_app_info{sync_status!="Synced"} == 1
+          for: 1h
+          labels:
+            severity: warning
+            scope: gitops
+          annotations:
+            summary: 'Argo CD app {{ $labels.name }} OutOfSync ha mais de 1h'
+            description: |
+              Application Argo CD {{ $labels.name }} (project: {{ $labels.project }})
+              esta OutOfSync ha mais de 1h — drift permanente.
+              Investigar:
+                kubectl -n argocd get application {{ $labels.name }} -o yaml
+              Verificar quais recursos divergem em `.status.resources`.

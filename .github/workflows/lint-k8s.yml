@@ -1,0 +1,18 @@
+name: Lint
+
+on:
+  # Qualquer branch — feedback imediato em feature branches; abrir PR
+  # nao duplica o run (PR mostra o check do push existente).
+  push:
+  # Pega drift do datreeio CRDs-catalog (schemas baixados em runtime).
+  schedule:
+    - cron: '0 8 * * 1'   # Segunda 08:00 UTC
+  # Botao manual no GitHub UI pra debug sem precisar de novo commit.
+  workflow_dispatch:
+
+jobs:
+  lint:
+    permissions:
+      contents: read
+      security-events: write   # SARIF upload (kube-linter, trivy-k8s)
+    uses: TourinhoM/org-ci-platform/.github/workflows/lint-k8s.yml@main

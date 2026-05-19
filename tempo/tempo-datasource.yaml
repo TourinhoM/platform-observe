@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempo-datasource
+data:
+  tempo-datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Tempo
+        uid: tempo
+        type: tempo
+        access: proxy
+        url: http://monitoring-tempo.monitoring.svc.cluster.local:3200
+        isDefault: false
+        jsonData:
+          httpMethod: GET
+          serviceMap:
+            datasourceUid: prometheus
+          nodeGraph:
+            enabled: true
+          tracesToLogsV2:
+            datasourceUid: loki
+            spanStartTimeShift: -1m
+            spanEndTimeShift: 1m
+            filterByTraceID: true
+            filterBySpanID: false
+          lokiSearch:
+            datasourceUid: loki
+          tracesToMetrics:
+            datasourceUid: prometheus
+            spanStartTimeShift: -2m
+            spanEndTimeShift: 2m
+            tags:
+              - key: service.name
+                value: service
+              - key: job
+            queries:
+              - name: Request rate
+                query: 'sum(rate(traces_spanmetrics_calls_total{$__tags}[5m]))'
+              - name: Request error rate
+                query: 'sum(rate(traces_spanmetrics_calls_total{$__tags,status_code="STATUS_CODE_ERROR"}[5m]))'
+              - name: Duration p95
+                query: 'histogram_quantile(0.95, sum(rate(traces_spanmetrics_latency_bucket{$__tags}[5m])) by (le))'

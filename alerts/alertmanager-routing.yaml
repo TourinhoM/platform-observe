@@ -1,0 +1,62 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: lab-routing
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/component: routing
+    # alertmanagerConfigSelector do Alertmanager CR no kube-prometheus-stack
+    # casa com label `release=monitoring` por padrao.
+    release: monitoring
+spec:
+  # Route raiz no AlertmanagerConfig namespaced: matchers e adicionado
+  # automaticamente com `namespace=<deste-objeto>`. Pra escopar pra
+  # alerts globais (qualquer namespace), usar route-level matchers
+  # explicitos como abaixo.
+  route:
+    # groupBy: junta notificacoes do mesmo alert+severity+scope em um
+    # unico email/webhook. Reduz ruido de fan-out (5 pods caindo = 1
+    # notificacao, nao 5).
+    groupBy: ['alertname', 'severity', 'scope']
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 12h
+    receiver: 'lab-log-only'
+
+    # Routing por severity. Em lab nada faz paging — tudo cai no mesmo
+    # receiver stub e fica visivel apenas no UI do Alertmanager. Em
+    # prod, esses 3 routes ganham receivers reais (PagerDuty / Slack /
+    # email-only) sem mudar o resto da arquitetura.
+    routes:
+      - matchers:
+          - name: severity
+            value: critical
+        receiver: 'lab-log-only'
+        # continue: false (default) — critical para aqui, nao cascateia.
+
+      - matchers:
+          - name: severity
+            value: warning
+        receiver: 'lab-log-only'
+
+      - matchers:
+          - name: severity
+            value: info
+        receiver: 'lab-log-only'
+
+  receivers:
+    # Receiver intencional log-only: webhook pra um endpoint inexistente
+    # em loopback. Alertmanager vai logar a tentativa de delivery (audit
+    # trail visivel em `kubectl -n monitoring logs alertmanager-monitoring-...`)
+    # mas nao polui canal humano. Toda a observabilidade fica no UI do
+    # Alertmanager (port-forward 9093) e no Prometheus /alerts.
+    #
+    # Trade-off explicito: nao escolhi receiver 'null' (vazio) porque
+    # ele e silent — nao gera nenhum sinal. Webhook pra 127.0.0.1
+    # mantem rastreabilidade ("o alert disparou, tentou notificar,
+    # falhou esperado") sem custo de delivery real.
+    - name: 'lab-log-only'
+      webhookConfigs:
+        - url: 'http://127.0.0.1:9999/lab-null-sink'
+          sendResolved: false

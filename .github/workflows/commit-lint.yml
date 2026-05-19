@@ -1,0 +1,12 @@
+name: Commitlint
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  commitlint:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: TourinhoM/org-ci-platform/.github/workflows/commitlint.yml@main

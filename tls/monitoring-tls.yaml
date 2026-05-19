@@ -1,0 +1,33 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: monitoring-tls
+  labels:
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/component: tls
+spec:
+  # 1 Certificate cobre todos os hosts do namespace `monitoring`
+  # (multi-SAN). Ingresses do Grafana e Prometheus referenciam o
+  # mesmo `secretName` — cert tem ambos os hosts no X.509 SAN.
+  #
+  # Pra adicionar Alertmanager UI, Loki gateway, etc., basta append
+  # em `dnsNames` aqui. cert-manager re-emite o cert e atualiza o
+  # Secret; Traefik recarrega TLS sem restart.
+  secretName: monitoring-tls
+
+  duration: 2160h        # 90 dias
+  renewBefore: 360h      # 15 dias
+
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+
+  dnsNames:
+    - grafana.local
+    - prometheus.local
+
+  # ClusterIssuer cluster-scoped, exposto pelo deploy-cert-manager.
+  issuerRef:
+    name: ca-issuer
+    kind: ClusterIssuer

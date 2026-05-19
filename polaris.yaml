@@ -1,0 +1,25 @@
+# Polaris config pro deploy-stack-monitor. Auto-detectado pela action
+# `polaris` do org-ci-platform via $GITHUB_WORKSPACE/polaris.yaml.
+#
+# Filosofia: Polaris vem com checks production-grade pra clusters
+# multi-node. Checks abaixo nao aplicam ao homelab single-node WSL.
+#
+# Cobertura: Polaris escaneia recursos com pod-spec (Deployment,
+# StatefulSet, etc.). Este repo so contem ConfigMaps (dashboards
+# Grafana via configMapGenerator) e PrometheusRule (alerts/) — nenhum
+# pod-spec. Polaris roda mas nao encontra recursos pra avaliar.
+#
+# O arquivo existe pra paridade com os outros deploy-* (acao do lint
+# unificada espera polaris.yaml por convencao) e pra deixar explicito
+# que checks production-grade foram revisados.
+
+checks:
+  # --- Out-of-scope: homelab single-node WSL ---
+  priorityClassNotSet: ignore         # 1 no, sem competicao por scheduling
+  topologySpreadConstraint: ignore    # 1 no, sem topologia pra spread
+  missingPodDisruptionBudget: ignore  # replicas: 1, PDB seria no-op
+  missingNetworkPolicy: ignore        # k3s default sem CNI policy enforcement
+  deploymentMissingReplicas: ignore   # replicas: 1 intencional pra economia de RAM
+
+  # --- Decisoes conscientes ---
+  metadataAndInstanceMismatched: ignore # convencao app.kubernetes.io/instance que upstream charts nao seguem
