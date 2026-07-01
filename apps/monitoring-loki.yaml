@@ -33,6 +33,18 @@ spec:
                   period: 24h
           limits_config:
             retention_period: 168h
+            # Ingestao OTLP (agente OTel -> /otlp/v1/logs). Indexa como stream labels
+            # apenas os 4 atributos que o Alloy usava; o resto vira structured metadata.
+            otlp_config:
+              resource_attributes:
+                ignore_defaults: true
+                attributes_config:
+                  - action: index_label
+                    attributes:
+                      - namespace
+                      - pod
+                      - container
+                      - app
 
         singleBinary:
           replicas: 1

@@ -5,7 +5,8 @@ resources:
   - monitoring-config.yaml
   - monitoring-loki.yaml
   - monitoring-loki-config.yaml
-  - monitoring-alloy.yaml
+  - monitoring-otel-gateway.yaml
+  - monitoring-otel-agent.yaml
   - monitoring-tempo.yaml
   - monitoring-tempo-config.yaml
   - monitoring-dashboards.yaml

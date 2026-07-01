@@ -1,0 +1,111 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-otel-gateway
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: monitoring
+
+  # Gateway de traces (Deployment). Recebe OTLP das aplicacoes, enriquece com
+  # metadados de pod (k8sattributes) e deriva peer.service/kind (OTTL) para o
+  # Service Graph do Tempo, e exporta para o Tempo. Substitui a pipeline de
+  # traces que rodava no Alloy. Endpoint para as apps: otel-gateway.monitoring:4318
+  source:
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: 0.159.2
+    helm:
+      values: |
+        fullnameOverride: otel-gateway
+        mode: deployment
+        # Padrao de gateway (Deployment escalavel); no lab fica em 1 replica.
+        replicaCount: 1
+
+        image:
+          repository: otel/opentelemetry-collector-contrib
+        command:
+          name: otelcol-contrib
+
+        presets:
+          kubernetesAttributes:
+            enabled: true
+
+        # Gateway central: portas de ingestao expostas via Service (sem hostPort),
+        # jaeger/zipkin desligados. Metrics ligado para o ServiceMonitor.
+        ports:
+          otlp:
+            enabled: true
+            hostPort: null
+          otlp-http:
+            enabled: true
+            hostPort: null
+          jaeger-compact:
+            enabled: false
+          jaeger-thrift:
+            enabled: false
+          jaeger-grpc:
+            enabled: false
+          zipkin:
+            enabled: false
+          metrics:
+            enabled: true
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+        config:
+          processors:
+            k8sattributes:
+              extract:
+                labels:
+                  - tag_name: app
+                    key: app.kubernetes.io/name
+                    from: pod
+            # Deriva peer.service e expoe kind como atributo de span para o Service Graph.
+            # Portado 1:1 do transform que rodava no Alloy (otelcol.processor.transform).
+            transform/peer:
+              error_mode: ignore
+              trace_statements:
+                - context: span
+                  statements:
+                    - set(attributes["peer.service"], Split(attributes["server.address"], ".")[0]) where IsMatch(attributes["server.address"], "^[a-zA-Z][a-zA-Z0-9-]+([.][a-zA-Z0-9-]+)+$")
+                    - set(attributes["peer.service"], attributes["server.address"]) where IsMatch(attributes["server.address"], "^[a-zA-Z][a-zA-Z0-9-]+$")
+                    - set(attributes["peer.service"], "argocd-repo-server") where IsMatch(attributes["server.address"], "^[0-9]") and IsMatch(attributes["rpc.method"], "^repository[.]")
+                    - set(attributes["kind"], "client") where kind == 3
+                    - set(attributes["kind"], "server") where kind == 2
+          exporters:
+            otlp/tempo:
+              endpoint: monitoring-tempo.monitoring.svc.cluster.local:4317
+              tls:
+                insecure: true
+          service:
+            pipelines:
+              traces:
+                receivers: [otlp]
+                processors: [memory_limiter, k8sattributes, transform/peer, batch]
+                exporters: [otlp/tempo]
+              metrics: null
+              logs: null
+
+        serviceMonitor:
+          enabled: true
+          extraLabels:
+            release: monitoring
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
