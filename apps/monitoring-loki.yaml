@@ -45,6 +45,8 @@ spec:
                       - pod
                       - container
                       - app
+                      - job
+                      - instance
 
         singleBinary:
           replicas: 1

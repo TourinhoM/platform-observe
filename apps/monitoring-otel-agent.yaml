@@ -78,6 +78,12 @@ spec:
                     - set(attributes["namespace"], attributes["k8s.namespace.name"])
                     - set(attributes["pod"], attributes["k8s.pod.name"])
                     - set(attributes["container"], attributes["k8s.container.name"])
+                    # Reproduz os labels convencionais do Loki que o Alloy setava
+                    # (loki.source.kubernetes), pra queries antigas no Explore seguirem:
+                    #   instance = <namespace>/<pod>:<container>
+                    #   job      = <namespace>/<app>
+                    - set(attributes["instance"], Concat([Concat([attributes["namespace"], attributes["pod"]], "/"), attributes["container"]], ":"))
+                    - set(attributes["job"], Concat([attributes["namespace"], attributes["app"]], "/")) where attributes["app"] != nil
           exporters:
             otlphttp/loki:
               logs_endpoint: http://monitoring-loki.monitoring.svc.cluster.local:3100/otlp/v1/logs
