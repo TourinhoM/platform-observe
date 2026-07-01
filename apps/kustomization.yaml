@@ -1,8 +1,13 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - monitoring-alerts.yaml
-  - monitoring-dashboards.yaml
+  - monitoring.yaml
+  - monitoring-config.yaml
+  - monitoring-loki.yaml
   - monitoring-loki-config.yaml
+  - monitoring-alloy.yaml
+  - monitoring-tempo.yaml
   - monitoring-tempo-config.yaml
+  - monitoring-dashboards.yaml
+  - monitoring-alerts.yaml
   - monitoring-tls.yaml

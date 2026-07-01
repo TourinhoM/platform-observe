@@ -1,0 +1,165 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-alloy
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: monitoring
+
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: alloy
+    targetRevision: 1.8.1
+    helm:
+      values: |
+        alloy:
+          extraPorts:
+            - name: otlp-grpc
+              port: 4317
+              targetPort: 4317
+              protocol: TCP
+          configMap:
+            content: |
+              // Descobre todos os pods do cluster via Kubernetes API
+              discovery.kubernetes "pods" {
+                role = "pod"
+              }
+
+              // Relabeling: extrai namespace, pod, container e app dos metadados
+              discovery.relabel "pods" {
+                targets = discovery.kubernetes.pods.targets
+
+                rule {
+                  source_labels = ["__meta_kubernetes_namespace"]
+                  target_label  = "namespace"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_name"]
+                  target_label  = "pod"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_container_name"]
+                  target_label  = "container"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+                  target_label  = "app"
+                }
+              }
+
+              // Coleta logs dos pods via Kubernetes API
+              loki.source.kubernetes "pods" {
+                targets    = discovery.relabel.pods.output
+                forward_to = [loki.write.local.receiver]
+              }
+
+              // Envia para o Loki
+              loki.write "local" {
+                endpoint {
+                  url = "http://monitoring-loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+                }
+              }
+
+              // Recebe traces via OTLP (gRPC e HTTP) de todos os servicos
+              otelcol.receiver.otlp "default" {
+                grpc { endpoint = "0.0.0.0:4317" }
+                http { endpoint = "0.0.0.0:4318" }
+                output {
+                  traces = [otelcol.processor.k8sattributes.default.input]
+                }
+              }
+
+              // Enriquece spans com metadados do pod origem (namespace, deployment, etc.)
+              otelcol.processor.k8sattributes "default" {
+                auth_type = "serviceAccount"
+
+                pod_association {
+                  source {
+                    from = "connection"
+                  }
+                }
+
+                extract {
+                  metadata = [
+                    "k8s.pod.name",
+                    "k8s.pod.uid",
+                    "k8s.deployment.name",
+                    "k8s.namespace.name",
+                    "k8s.node.name",
+                  ]
+                }
+
+                output {
+                  traces = [otelcol.processor.transform.set_peer_service.input]
+                }
+              }
+
+              // Deriva peer.service e expoe kind como atributo de span para o Service Structure.
+              // Condicoes mutuamente exclusivas por formato de server.address — sem checar == nil
+              // porque pcommon.Value zero != nil em OTTL e a condicao nunca dispararia.
+              // 1. FQDN (letra + ponto) -> primeiro componente DNS
+              // 2. Short hostname (letra, sem ponto) -> usado direto
+              // 3. IP (digito) + rpc.method conhecida -> nome do servico destino
+              // 4-5. Expoe kind como atributo de span — Tempo indexa kind como intrínseco mas
+              //      grafana-exploretraces-app 2.0.x usa {span.kind="client"} (atributo)
+              otelcol.processor.transform "set_peer_service" {
+                error_mode = "ignore"
+
+                trace_statements {
+                  context = "span"
+                  statements = [
+                    `set(attributes["peer.service"], Split(attributes["server.address"], ".")[0]) where IsMatch(attributes["server.address"], "^[a-zA-Z][a-zA-Z0-9-]+([.][a-zA-Z0-9-]+)+$")`,
+                    `set(attributes["peer.service"], attributes["server.address"]) where IsMatch(attributes["server.address"], "^[a-zA-Z][a-zA-Z0-9-]+$")`,
+                    `set(attributes["peer.service"], "argocd-repo-server") where IsMatch(attributes["server.address"], "^[0-9]") and IsMatch(attributes["rpc.method"], "^repository[.]")`,
+                    `set(attributes["kind"], "client") where kind == 3`,
+                    `set(attributes["kind"], "server") where kind == 2`,
+                  ]
+                }
+
+                output {
+                  traces = [otelcol.exporter.otlp.tempo.input]
+                }
+              }
+
+              // Encaminha traces enriquecidos para o Tempo
+              otelcol.exporter.otlp "tempo" {
+                client {
+                  endpoint = "monitoring-tempo.monitoring.svc.cluster.local:4317"
+                  tls { insecure = true }
+                }
+              }
+
+        controller:
+          type: daemonset
+
+        rbac:
+          extraClusterRoleRules:
+            - apiGroups: ["apps"]
+              resources: ["replicasets"]
+              verbs: ["get", "list", "watch"]
+
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+        serviceMonitor:
+          enabled: true
+          additionalLabels:
+            release: monitoring
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

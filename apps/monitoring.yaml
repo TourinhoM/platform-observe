@@ -1,0 +1,120 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+spec:
+  project: monitoring
+
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 84.3.0
+    helm:
+      values: |
+        alertmanager:
+          enabled: true
+          alertmanagerSpec:
+            replicas: 1
+            storage:
+              volumeClaimTemplate:
+                spec:
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 1Gi
+        grafana:
+          enabled: true
+
+          admin:
+            existingSecret: grafana-admin-credentials
+            userKey: admin-user
+            passwordKey: admin-password
+
+          envFromSecrets:
+            - name: grafana-db-credentials
+
+          grafana.ini:
+            database:
+              type: postgres
+              host: postgresql.infra.svc.cluster.local:5432
+              name: grafana
+              user: grafana
+              password: $__env{GF_DATABASE_PASSWORD}
+
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    sleep 5
+                    PLUGIN=/var/lib/grafana/plugins/grafana-exploretraces-app
+                    sed -i "s/R=\"\${primarySignal} && \${filters}\"/R=\"\${primarySignal}\"/g" $PLUGIN/module.js
+                    sed -i 's/}(JSON.parse(t));e.children.sort(/}((JSON.parse(t).traces||JSON.parse(t)));e.children.sort(/g' $PLUGIN/966.js
+                    NEW_HASH="sha256-$(sha256sum $PLUGIN/966.js | cut -d' ' -f1 | xxd -r -p | base64 -w 0)"
+                    OLD_HASH=$(grep -o '966:"sha256-[^"]*"' $PLUGIN/module.js | grep -o 'sha256-[^"]*')
+                    sed -i "s|966:\"${OLD_HASH}\"|966:\"${NEW_HASH}\"|g" $PLUGIN/module.js
+
+          persistence:
+            enabled: true
+            type: pvc
+            accessModes: ["ReadWriteOnce"]
+            size: 2Gi
+
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+
+            annotations:
+              traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+
+            hosts:
+              - grafana.local
+
+            tls:
+              - hosts:
+                  - grafana.local
+                secretName: monitoring-tls
+        prometheus:
+          service:
+            type: ClusterIP
+            port: 9090
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            annotations:
+              traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+            hosts:
+              - prometheus.local
+            tls:
+              - secretName: monitoring-tls
+                hosts:
+                  - prometheus.local
+          prometheusSpec:
+            enableRemoteWriteReceiver: true
+            retention: 7d
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 5Gi
+        prometheus-node-exporter:
+          enabled: true
+          hostRootFsMount:
+            enabled: false
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
