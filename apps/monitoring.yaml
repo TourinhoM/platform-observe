@@ -37,6 +37,19 @@ spec:
             - grafana-metricsdrilldown-app  # Metrics Drilldown
             - grafana-exploretraces-app     # Traces Drilldown
 
+          # O init-chown-data (chown root do PVC) morre com "Permission denied":
+          # roda como root mas com as capabilities dropadas (sem DAC_OVERRIDE),
+          # então não consegue chownar os subdirs que o Grafana cria como uid 472.
+          # Via limpa: kubelet ajusta a dona do volume por fsGroup, sem root nem
+          # init container — e o pod passa a rodar non-root de ponta a ponta.
+          initChownData:
+            enabled: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 472
+            runAsGroup: 472
+            fsGroup: 472
+
           admin:
             existingSecret: grafana-admin-credentials
             userKey: admin-user
