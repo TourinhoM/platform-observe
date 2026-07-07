@@ -33,8 +33,11 @@ spec:
                   period: 24h
           limits_config:
             retention_period: 168h
-            # Ingestao OTLP (agente OTel -> /otlp/v1/logs). Indexa como stream labels
-            # apenas os 4 atributos que o Alloy usava; o resto vira structured metadata.
+            # Ingestao OTLP (agente OTel -> /otlp/v1/logs). ignore_defaults desliga a
+            # promocao padrao do Loki; indexamos como stream labels so o conjunto abaixo
+            # (os que o Alloy usava + service.name). O resto vira structured metadata.
+            # service.name e indexado como label `service_name` (o . vira _), ancora do
+            # Logs Drilldown do Grafana.
             otlp_config:
               resource_attributes:
                 ignore_defaults: true
@@ -47,6 +50,7 @@ spec:
                       - app
                       - job
                       - instance
+                      - service.name
 
         singleBinary:
           replicas: 1

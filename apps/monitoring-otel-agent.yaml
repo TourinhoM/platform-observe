@@ -84,6 +84,11 @@ spec:
                     #   job      = <namespace>/<app>
                     - set(attributes["instance"], Concat([Concat([attributes["namespace"], attributes["pod"]], "/"), attributes["container"]], ":"))
                     - set(attributes["job"], Concat([attributes["namespace"], attributes["app"]], "/")) where attributes["app"] != nil
+                    # service.name -> o Loki promove a label service_name, ancora do
+                    # Logs Drilldown do Grafana. Deriva do app.kubernetes.io/name, com
+                    # fallback pro nome do container. Sem isso o Drilldown nasce vazio.
+                    - set(attributes["service.name"], attributes["app"]) where attributes["app"] != nil
+                    - set(attributes["service.name"], attributes["container"]) where attributes["service.name"] == nil
           exporters:
             otlphttp/loki:
               logs_endpoint: http://monitoring-loki.monitoring.svc.cluster.local:3100/otlp/v1/logs
