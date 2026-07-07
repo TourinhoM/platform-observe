@@ -26,6 +26,17 @@ spec:
         grafana:
           enabled: true
 
+          # Drilldown apps (Logs/Metrics/Traces). Antes instalados na mão pelo
+          # catálogo da UI: viviam só no PVC e sumiam em cluster subido do zero.
+          # Codificados aqui (vira GF_INSTALL_PLUGINS) pra nascerem do git em
+          # todo boot limpo. Requer egress do Grafana pra grafana.com + o CDN.
+          # A versão do grafana-exploretraces-app é acoplada ao patch do
+          # postStart abaixo — ao pinar/atualizar, revisar aquele hook.
+          plugins:
+            - grafana-lokiexplore-app       # Logs Drilldown
+            - grafana-metricsdrilldown-app  # Metrics Drilldown
+            - grafana-exploretraces-app     # Traces Drilldown
+
           admin:
             existingSecret: grafana-admin-credentials
             userKey: admin-user
@@ -51,6 +62,9 @@ spec:
                   - |
                     sleep 5
                     PLUGIN=/var/lib/grafana/plugins/grafana-exploretraces-app
+                    # Se o plugin não instalou (ex.: sem egress pra grafana.com),
+                    # não deixa o hook falhar e derrubar o pod — só pula o patch.
+                    [ -d "$PLUGIN" ] || { echo "exploretraces ausente, pulando patch de SRI"; exit 0; }
                     sed -i "s/R=\"\${primarySignal} && \${filters}\"/R=\"\${primarySignal}\"/g" $PLUGIN/module.js
                     sed -i 's/}(JSON.parse(t));e.children.sort(/}((JSON.parse(t).traces||JSON.parse(t)));e.children.sort(/g' $PLUGIN/966.js
                     NEW_HASH="sha256-$(sha256sum $PLUGIN/966.js | cut -d' ' -f1 | xxd -r -p | base64 -w 0)"
