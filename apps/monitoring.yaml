@@ -26,22 +26,13 @@ spec:
         grafana:
           enabled: true
 
-          # Drilldown apps (Logs/Metrics/Traces). Antes instalados na mão pelo
-          # catálogo da UI: viviam só no PVC e sumiam em cluster subido do zero.
-          # Codificados aqui (vira GF_INSTALL_PLUGINS) pra nascerem do git em
-          # todo boot limpo. Requer egress do Grafana pra grafana.com + o CDN.
-          # A versão do grafana-exploretraces-app é acoplada ao patch do
-          # postStart abaixo — ao pinar/atualizar, revisar aquele hook.
+          # Plugins de Drilldown (Logs/Metrics/Traces).
           plugins:
             - grafana-lokiexplore-app       # Logs Drilldown
             - grafana-metricsdrilldown-app  # Metrics Drilldown
             - grafana-exploretraces-app     # Traces Drilldown
 
-          # O init-chown-data (chown root do PVC) morre com "Permission denied":
-          # roda como root mas com as capabilities dropadas (sem DAC_OVERRIDE),
-          # então não consegue chownar os subdirs que o Grafana cria como uid 472.
-          # Via limpa: kubelet ajusta a dona do volume por fsGroup, sem root nem
-          # init container — e o pod passa a rodar non-root de ponta a ponta.
+          # Desliga init-chown-data; volume ajustado via fsGroup.
           initChownData:
             enabled: false
           securityContext:
@@ -75,8 +66,7 @@ spec:
                   - |
                     sleep 5
                     PLUGIN=/var/lib/grafana/plugins/grafana-exploretraces-app
-                    # Se o plugin não instalou (ex.: sem egress pra grafana.com),
-                    # não deixa o hook falhar e derrubar o pod — só pula o patch.
+                    # Pula o patch se o plugin nao instalou.
                     [ -d "$PLUGIN" ] || { echo "exploretraces ausente, pulando patch de SRI"; exit 0; }
                     sed -i "s/R=\"\${primarySignal} && \${filters}\"/R=\"\${primarySignal}\"/g" $PLUGIN/module.js
                     sed -i 's/}(JSON.parse(t));e.children.sort(/}((JSON.parse(t).traces||JSON.parse(t)));e.children.sort(/g' $PLUGIN/966.js

@@ -1,13 +1,12 @@
 name: Lint
 
 on:
-  # Qualquer branch — feedback imediato em feature branches; abrir PR
-  # nao duplica o run (PR mostra o check do push existente).
+  # Roda em qualquer branch.
   push:
-  # Pega drift do datreeio CRDs-catalog (schemas baixados em runtime).
+  # Pega drift do CRDs-catalog.
   schedule:
     - cron: '0 8 * * 1'   # Segunda 08:00 UTC
-  # Botao manual no GitHub UI pra debug sem precisar de novo commit.
+  # Botao manual no GitHub UI.
   workflow_dispatch:
 
 jobs:

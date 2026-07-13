@@ -12,10 +12,7 @@ spec:
     - name: keycloak.health
       interval: 30s
       rules:
-        # up{container="keycloak"}: gauge do scrape do ServiceMonitor.
-        # 0 = endpoint /metrics inacessivel (pod down, crash, OOM).
-        # absent() cobre o caso de ServiceMonitor nao ter target nenhum
-        # (label drift, Service sem endpoints).
+        # Alerta quando up==0 ou metrica ausente.
         - alert: KeycloakDown
           expr: |
             up{namespace="keycloak", container="keycloak"} == 0
@@ -33,12 +30,7 @@ spec:
                 kubectl -n keycloak describe keycloak keycloak
                 kubectl -n keycloak logs -l app=keycloak --tail=100
 
-        # 5xx ratio > 5% sustentado por 5min. Cobre regression de
-        # deploy, DB indisponivel, OOM mid-request. Threshold baixo
-        # porque Keycloak em estado saudavel raramente passa de 1%.
-        # Guard com clamp_min pra evitar divisao por zero quando nao
-        # ha trafego (lab fica idle horas) — sem isso, 0/0 = NaN
-        # e o alert nem dispara, mas pra ser explicito.
+        # Alerta em ratio de 5xx > 5% por 5min.
         - alert: KeycloakHighErrorRate
           expr: |
             sum(rate(http_server_requests_seconds_count{namespace="keycloak", outcome="SERVER_ERROR"}[5m]))
@@ -59,10 +51,7 @@ spec:
                 kubectl -n keycloak logs -l app=keycloak --tail=200 | grep ERROR
                 kubectl -n infra exec postgresql-0 -- pg_isready
 
-        # p95 latencia nas chamadas autenticadas (token, userinfo, admin).
-        # Quem aciona realmente: login endurecido por Postgres lento,
-        # JVM em GC long pause, ou pressao em agroal pool.
-        # 2s e generoso — autenticacao saudavel fica em <500ms.
+        # Alerta em p95 > 2s nos endpoints de auth.
         - alert: KeycloakHighLatencyAuth
           expr: |
             histogram_quantile(
@@ -87,11 +76,7 @@ spec:
                 - JVM: ver dashboard "Keycloak — Troubleshooting" (GC pause, heap)
                 - Network: ver se HAProxy/Ingress nao esta adicionando latencia
 
-        # Heap commit usage > 85%. Heap commit cresce sob demanda ate o
-        # max (Xmx) — usage / committed > 85% por 10min significa que JVM
-        # esta perto do teto e GC vai degradar (alta frequencia de Full GC).
-        # Threshold em committed (nao max) porque committed reflete pressao
-        # real: se JVM ainda nao expandiu heap, ela tem folga.
+        # Alerta em heap usage > 85% do committed por 10min.
         - alert: KeycloakJVMHeapPressure
           expr: |
             sum by (pod) (jvm_memory_used_bytes{namespace="keycloak", area="heap"})
@@ -113,12 +98,7 @@ spec:
               Mitigacao: aumentar memory limit em base/keycloak.yaml ou
               tunar JAVA_OPTS_APPEND com -Xmx explicito.
 
-        # Spike de LOGIN_ERROR — indicador de seguranca, nao de saude.
-        # > 1 evento/s sustentado por 5min sugere:
-        #   - brute force em conta existente
-        #   - credential stuffing (lista vazada testada em massa)
-        #   - regression em config de realm que rejeita todos logins
-        # Threshold conservador pra lab; em prod escalar com baseline.
+        # Alerta em spike de LOGIN_ERROR (> 1/s por 5min).
         - alert: KeycloakLoginFailureSpike
           expr: |
             sum(rate(keycloak_user_events_total{namespace="keycloak", event="LOGIN_ERROR"}[5m])) > 1

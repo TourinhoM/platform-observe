@@ -33,11 +33,7 @@ spec:
                   period: 24h
           limits_config:
             retention_period: 168h
-            # Ingestao OTLP (agente OTel -> /otlp/v1/logs). ignore_defaults desliga a
-            # promocao padrao do Loki; indexamos como stream labels so o conjunto abaixo
-            # (os que o Alloy usava + service.name). O resto vira structured metadata.
-            # service.name e indexado como label `service_name` (o . vira _), ancora do
-            # Logs Drilldown do Grafana.
+            # Indexa o conjunto abaixo como stream labels; resto vira structured metadata.
             otlp_config:
               resource_attributes:
                 ignore_defaults: true

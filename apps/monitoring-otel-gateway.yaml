@@ -8,10 +8,7 @@ metadata:
 spec:
   project: monitoring
 
-  # Gateway de traces (Deployment). Recebe OTLP das aplicacoes, enriquece com
-  # metadados de pod (k8sattributes) e deriva peer.service/kind (OTTL) para o
-  # Service Graph do Tempo, e exporta para o Tempo. Substitui a pipeline de
-  # traces que rodava no Alloy. Endpoint para as apps: otel-gateway.monitoring:4318
+  # Gateway de traces (Deployment): recebe OTLP das apps e exporta pro Tempo.
   source:
     repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
     chart: opentelemetry-collector
@@ -20,7 +17,7 @@ spec:
       values: |
         fullnameOverride: otel-gateway
         mode: deployment
-        # Padrao de gateway (Deployment escalavel); no lab fica em 1 replica.
+        # 1 replica no lab.
         replicaCount: 1
 
         image:
@@ -32,8 +29,7 @@ spec:
           kubernetesAttributes:
             enabled: true
 
-        # Gateway central: portas de ingestao expostas via Service (sem hostPort),
-        # jaeger/zipkin desligados. Metrics ligado para o ServiceMonitor.
+        # Portas de ingestao expostas via Service; jaeger/zipkin off.
         ports:
           otlp:
             enabled: true
@@ -68,8 +64,7 @@ spec:
                   - tag_name: app
                     key: app.kubernetes.io/name
                     from: pod
-            # Deriva peer.service e expoe kind como atributo de span para o Service Graph.
-            # Portado 1:1 do transform que rodava no Alloy (otelcol.processor.transform).
+            # Deriva peer.service e kind pro Service Graph.
             transform/peer:
               error_mode: ignore
               trace_statements:

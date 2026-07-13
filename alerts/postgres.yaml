@@ -12,9 +12,7 @@ spec:
     - name: postgres.health
       interval: 30s
       rules:
-        # pg_up: gauge do exporter. 1 = exporter conectou OK no DB,
-        # 0 = exporter rodando mas falhou conexao. `absent()` cobre
-        # exporter caido (sem metrica nenhuma).
+        # Alerta quando pg_up==0 ou metrica ausente.
         - alert: PostgresDown
           expr: |
             pg_up == 0 or absent(pg_up)
@@ -30,9 +28,7 @@ spec:
                 kubectl -n infra get pod -l app.kubernetes.io/name=postgresql
                 kubectl -n infra logs postgresql-0 -c postgres-exporter
 
-        # Ratio de uso vs max_connections do server. Postgres recusa
-        # novas conexoes quando max_connections atinge — quebra todos
-        # os clients downstream (Keycloak primeiro).
+        # Alerta em uso > 80% dos connection slots.
         - alert: PostgresTooManyConnections
           expr: |
             sum(pg_stat_database_numbackends) / max(pg_settings_max_connections) * 100 > 80

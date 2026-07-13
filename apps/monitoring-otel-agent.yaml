@@ -8,11 +8,7 @@ metadata:
 spec:
   project: monitoring
 
-  # Agente de logs (DaemonSet). Le os logs dos pods em /var/log/pods (filelog),
-  # enriquece com metadados de pod (k8sattributes) e promove namespace/pod/
-  # container/app a atributos de recurso para o Loki indexar como labels — os
-  # MESMOS labels que o Alloy usava, sem quebrar queries/dashboards. Substitui a
-  # pipeline de logs (loki.source.kubernetes) que rodava no Alloy.
+  # Agente de logs (DaemonSet): le logs dos pods e empurra pro Loki.
   source:
     repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
     chart: opentelemetry-collector
@@ -67,9 +63,7 @@ spec:
                   - tag_name: app
                     key: app.kubernetes.io/name
                     from: pod
-            # Promove os atributos k8s a atributos de recurso com os MESMOS nomes de
-            # label que o Alloy indexava (namespace/pod/container/app). O Loki indexa
-            # esses quatro como stream labels (ver limits_config.otlp_config no Loki).
+            # Promove atributos k8s a atributos de recurso indexados pelo Loki.
             transform/loki_labels:
               error_mode: ignore
               log_statements:
@@ -78,15 +72,10 @@ spec:
                     - set(attributes["namespace"], attributes["k8s.namespace.name"])
                     - set(attributes["pod"], attributes["k8s.pod.name"])
                     - set(attributes["container"], attributes["k8s.container.name"])
-                    # Reproduz os labels convencionais do Loki que o Alloy setava
-                    # (loki.source.kubernetes), pra queries antigas no Explore seguirem:
-                    #   instance = <namespace>/<pod>:<container>
-                    #   job      = <namespace>/<app>
+                    # Deriva os labels instance e job.
                     - set(attributes["instance"], Concat([Concat([attributes["namespace"], attributes["pod"]], "/"), attributes["container"]], ":"))
                     - set(attributes["job"], Concat([attributes["namespace"], attributes["app"]], "/")) where attributes["app"] != nil
-                    # service.name -> o Loki promove a label service_name, ancora do
-                    # Logs Drilldown do Grafana. Deriva do app.kubernetes.io/name, com
-                    # fallback pro nome do container. Sem isso o Drilldown nasce vazio.
+                    # Deriva service.name (app, com fallback pro container).
                     - set(attributes["service.name"], attributes["app"]) where attributes["app"] != nil
                     - set(attributes["service.name"], attributes["container"]) where attributes["service.name"] == nil
           exporters:
