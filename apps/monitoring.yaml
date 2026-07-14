@@ -50,6 +50,8 @@ spec:
             - name: grafana-db-credentials
 
           grafana.ini:
+            security:
+              allow_embedding: true
             database:
               type: postgres
               host: postgresql.infra.svc.cluster.local:5432
