@@ -18,3 +18,6 @@ configMapGenerator:
   - name: grafana-dashboard-trivy-operator
     files:
       - trivy-operator.json
+  - name: grafana-dashboard-app-overview
+    files:
+      - app-overview.json
