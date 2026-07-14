@@ -52,6 +52,10 @@ spec:
           grafana.ini:
             security:
               allow_embedding: true
+            auth.anonymous:
+              enabled: true
+              org_name: Main Org.
+              org_role: Viewer
             database:
               type: postgres
               host: postgresql.infra.svc.cluster.local:5432
