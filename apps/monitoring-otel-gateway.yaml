@@ -80,13 +80,18 @@ spec:
               endpoint: monitoring-tempo.monitoring.svc.cluster.local:4317
               tls:
                 insecure: true
+            prometheusremotewrite:
+              endpoint: http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090/api/v1/write
           service:
             pipelines:
               traces:
                 receivers: [otlp]
                 processors: [memory_limiter, k8sattributes, transform/peer, batch]
                 exporters: [otlp/tempo]
-              metrics: null
+              metrics:
+                receivers: [otlp]
+                processors: [memory_limiter, k8sattributes, batch]
+                exporters: [prometheusremotewrite]
               logs: null
 
         serviceMonitor:
