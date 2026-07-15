@@ -41,6 +41,15 @@ spec:
             runAsGroup: 472
             fsGroup: 472
 
+          extraConfigmapMounts:
+            - name: lab-ca-bundle
+              mountPath: /etc/ssl/certs/lab-ca.crt
+              subPath: ca.crt
+              configMap: lab-ca-bundle
+              readOnly: true
+          env:
+            SSL_CERT_FILE: /etc/ssl/certs/lab-ca.crt
+
           admin:
             existingSecret: grafana-admin-credentials
             userKey: admin-user
@@ -48,6 +57,7 @@ spec:
 
           envFromSecrets:
             - name: grafana-db-credentials
+            - name: grafana-oidc-credentials
 
           grafana.ini:
             security:
@@ -56,6 +66,18 @@ spec:
               enabled: true
               org_name: Main Org.
               org_role: Viewer
+            auth.generic_oauth:
+              enabled: true
+              name: Keycloak
+              client_id: grafana
+              client_secret: $__env{GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET}
+              scopes: openid profile email groups
+              auth_url: https://keycloak.local/keycloak/realms/kubernetes/protocol/openid-connect/auth
+              token_url: https://keycloak.local/keycloak/realms/kubernetes/protocol/openid-connect/token
+              api_url: https://keycloak.local/keycloak/realms/kubernetes/protocol/openid-connect/userinfo
+              role_attribute_path: "contains(groups[*], 'grafana-admins') && 'Admin' || contains(groups[*], 'grafana-editors') && 'Editor' || contains(groups[*], 'grafana-viewers') && 'Viewer' || 'Viewer'"
+              role_attribute_strict: false
+              allow_sign_up: true
             database:
               type: postgres
               host: postgresql.infra.svc.cluster.local:5432
