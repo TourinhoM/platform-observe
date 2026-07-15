@@ -60,6 +60,8 @@ spec:
             - name: grafana-oidc-credentials
 
           grafana.ini:
+            server:
+              root_url: https://grafana.local/
             security:
               allow_embedding: true
             auth.anonymous:
