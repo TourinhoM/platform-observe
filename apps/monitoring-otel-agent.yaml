@@ -61,10 +61,14 @@ spec:
         config:
           processors:
             k8sattributes:
-              # Sem isso, o hostPort receiver associa tudo ao próprio pod do
-              # agent (default do preset). Conexão same-node preserva o IP
-              # de origem, então usa o IP de quem conectou pra achar o pod real.
+              # from: connection sozinho não resolve pra OTLP/HTTP (só é
+              # confiável em gRPC) — cai pro próprio pod do agent. App manda
+              # k8s.pod.ip via OTEL_RESOURCE_ATTRIBUTES (Downward API);
+              # connection fica só de fallback pro que não seta isso.
               pod_association:
+                - sources:
+                    - from: resource_attribute
+                      name: k8s.pod.ip
                 - sources:
                     - from: connection
               extract:
