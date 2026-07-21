@@ -61,6 +61,12 @@ spec:
         config:
           processors:
             k8sattributes:
+              # Sem isso, o hostPort receiver associa tudo ao próprio pod do
+              # agent (default do preset). Conexão same-node preserva o IP
+              # de origem, então usa o IP de quem conectou pra achar o pod real.
+              pod_association:
+                - sources:
+                    - from: connection
               extract:
                 labels:
                   - tag_name: app
