@@ -21,3 +21,6 @@ configMapGenerator:
   - name: grafana-dashboard-app-overview
     files:
       - app-overview.json
+  - name: grafana-dashboard-app-overview-java
+    files:
+      - app-overview-java.json
