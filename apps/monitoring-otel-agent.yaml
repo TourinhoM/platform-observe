@@ -8,7 +8,9 @@ metadata:
 spec:
   project: monitoring
 
-  # Agente de logs (DaemonSet): le logs dos pods e empurra pro Loki.
+  # Agente de logs+traces+metrics (DaemonSet): le logs dos pods e empurra pro
+  # Loki; recebe OTLP local das apps do mesmo no (hostPort) e repassa pro
+  # otel-gateway — apps nunca falam com o gateway direto, so com o agent local.
   source:
     repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
     chart: opentelemetry-collector
@@ -30,12 +32,13 @@ spec:
           kubernetesAttributes:
             enabled: true
 
-        # Agente so le arquivos e empurra pro Loki — nenhuma porta de ingestao exposta.
+        # otlp/otlp-http com hostPort: apps do mesmo no alcancam via $(HOST_IP),
+        # sem cruzar rede nem fronteira de conta. Resto continua desligado.
         ports:
           otlp:
-            enabled: false
+            enabled: true
           otlp-http:
-            enabled: false
+            enabled: true
           jaeger-compact:
             enabled: false
           jaeger-thrift:
@@ -81,14 +84,27 @@ spec:
           exporters:
             otlphttp/loki:
               logs_endpoint: http://monitoring-loki.monitoring.svc.cluster.local:3100/otlp/v1/logs
+            # Unico egress do agent pra fora do no — sempre pro gateway, nunca
+            # pro Tempo/Prometheus direto (isso continua so responsabilidade
+            # do gateway, que e quem de fato cruza fronteira de conta no real).
+            otlp/gateway:
+              endpoint: otel-gateway.monitoring.svc.cluster.local:4317
+              tls:
+                insecure: true
           service:
             pipelines:
               logs:
                 receivers: [filelog]
                 processors: [memory_limiter, k8sattributes, transform/loki_labels, batch]
                 exporters: [otlphttp/loki]
-              metrics: null
-              traces: null
+              metrics:
+                receivers: [otlp]
+                processors: [memory_limiter, k8sattributes, batch]
+                exporters: [otlp/gateway]
+              traces:
+                receivers: [otlp]
+                processors: [memory_limiter, k8sattributes, batch]
+                exporters: [otlp/gateway]
 
         serviceMonitor:
           enabled: true
