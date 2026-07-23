@@ -56,6 +56,16 @@ spec:
             cpu: 500m
             memory: 512Mi
 
+        # Teste do exporter datadog (trial) — DD_API_KEY vem do vault-homelab via
+        # ExternalSecret (secrets/externalsecret-datadog.yaml), mesmo padrao do
+        # resto do repo.
+        extraEnvVars:
+          - name: DD_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: datadog-api-key
+                key: api-key
+
         config:
           processors:
             k8sattributes:
@@ -86,16 +96,27 @@ spec:
               # k8s.namespace.name/k8s.pod.name (do k8sattributes) são descartados.
               resource_to_telemetry_conversion:
                 enabled: true
+            # Teste de trial — site US1 (padrão de conta nova); trocar pra
+            # datadoghq.eu se o trial cair em EU1.
+            datadog:
+              api:
+                key: ${env:DD_API_KEY}
+                site: datadoghq.com
+          connectors:
+            # Computa APM stats (latência/erro/hit count por serviço) a partir
+            # dos traces — sem isso as telas de Service Catalog/APM Analytics
+            # no Datadog não populam, mesmo com os traces chegando via exporter.
+            datadog/connector: {}
           service:
             pipelines:
               traces:
                 receivers: [otlp]
                 processors: [memory_limiter, k8sattributes, transform/peer, batch]
-                exporters: [otlp/tempo]
+                exporters: [otlp/tempo, datadog, datadog/connector]
               metrics:
-                receivers: [otlp]
+                receivers: [otlp, datadog/connector]
                 processors: [memory_limiter, k8sattributes, batch]
-                exporters: [prometheusremotewrite]
+                exporters: [prometheusremotewrite, datadog]
               logs: null
 
         serviceMonitor:
