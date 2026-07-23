@@ -81,6 +81,23 @@ spec:
                   - tag_name: app
                     key: app.kubernetes.io/name
                     from: pod
+            # deployment.environment a partir do sufixo do namespace (-dev/-hml/-prd)
+            # — é o que o exporter datadog usa pra tag "env" (k8s.namespace.name
+            # sozinho não vira env lá). Sem declarar nada em app/chart nenhum.
+            transform/env:
+              error_mode: ignore
+              trace_statements:
+                - context: resource
+                  statements:
+                    - set(attributes["deployment.environment"], "dev") where IsMatch(attributes["k8s.namespace.name"], "-dev$")
+                    - set(attributes["deployment.environment"], "hml") where IsMatch(attributes["k8s.namespace.name"], "-hml$")
+                    - set(attributes["deployment.environment"], "prd") where IsMatch(attributes["k8s.namespace.name"], "-prd$")
+              metric_statements:
+                - context: resource
+                  statements:
+                    - set(attributes["deployment.environment"], "dev") where IsMatch(attributes["k8s.namespace.name"], "-dev$")
+                    - set(attributes["deployment.environment"], "hml") where IsMatch(attributes["k8s.namespace.name"], "-hml$")
+                    - set(attributes["deployment.environment"], "prd") where IsMatch(attributes["k8s.namespace.name"], "-prd$")
             # Deriva peer.service e kind pro Service Graph.
             transform/peer:
               error_mode: ignore
@@ -120,11 +137,11 @@ spec:
             pipelines:
               traces:
                 receivers: [otlp]
-                processors: [memory_limiter, k8sattributes, transform/peer, batch]
+                processors: [memory_limiter, k8sattributes, transform/env, transform/peer, batch]
                 exporters: [otlp/tempo, datadog, datadog/connector]
               metrics:
                 receivers: [otlp, datadog/connector]
-                processors: [memory_limiter, k8sattributes, batch]
+                processors: [memory_limiter, k8sattributes, transform/env, batch]
                 exporters: [prometheusremotewrite, datadog]
               logs: null
 
