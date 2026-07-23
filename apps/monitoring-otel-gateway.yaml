@@ -109,6 +109,18 @@ spec:
                     - set(attributes["peer.service"], "argocd-repo-server") where IsMatch(attributes["server.address"], "^[0-9]") and IsMatch(attributes["rpc.method"], "^repository[.]")
                     - set(attributes["kind"], "client") where kind == 3
                     - set(attributes["kind"], "server") where kind == 2
+            # Só pro ramo Datadog: derruba dev/hml. prd e qualquer coisa sem
+            # deployment.environment reconhecido passam (fail-open).
+            filter/prod_only:
+              error_mode: ignore
+              traces:
+                span:
+                  - resource.attributes["deployment.environment"] == "dev"
+                  - resource.attributes["deployment.environment"] == "hml"
+              metrics:
+                metric:
+                  - resource.attributes["deployment.environment"] == "dev"
+                  - resource.attributes["deployment.environment"] == "hml"
           exporters:
             otlp/tempo:
               endpoint: monitoring-tempo.monitoring.svc.cluster.local:4317
@@ -135,14 +147,25 @@ spec:
             datadog/connector: {}
           service:
             pipelines:
+              # Tempo/Prometheus recebem tudo, sem filtro de ambiente.
               traces:
                 receivers: [otlp]
                 processors: [memory_limiter, k8sattributes, transform/env, transform/peer, batch]
-                exporters: [otlp/tempo, datadog, datadog/connector]
+                exporters: [otlp/tempo]
               metrics:
-                receivers: [otlp, datadog/connector]
+                receivers: [otlp]
                 processors: [memory_limiter, k8sattributes, transform/env, batch]
-                exporters: [prometheusremotewrite, datadog]
+                exporters: [prometheusremotewrite]
+              # Ramo só-Datadog: mesmo receiver, com filter/prod_only antes do
+              # exporter — dev/hml nunca saem daqui.
+              traces/datadog:
+                receivers: [otlp]
+                processors: [memory_limiter, k8sattributes, transform/env, filter/prod_only, batch]
+                exporters: [datadog, datadog/connector]
+              metrics/datadog:
+                receivers: [otlp, datadog/connector]
+                processors: [memory_limiter, k8sattributes, transform/env, filter/prod_only, batch]
+                exporters: [datadog]
               logs: null
 
         serviceMonitor:
