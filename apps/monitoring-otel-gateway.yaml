@@ -59,7 +59,7 @@ spec:
         # Teste do exporter datadog (trial) — DD_API_KEY vem do vault-homelab via
         # ExternalSecret (secrets/externalsecret-datadog.yaml), mesmo padrao do
         # resto do repo.
-        extraEnvVars:
+        extraEnvs:
           - name: DD_API_KEY
             valueFrom:
               secretKeyRef:
