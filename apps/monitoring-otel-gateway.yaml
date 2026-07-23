@@ -56,6 +56,13 @@ spec:
             cpu: 500m
             memory: 512Mi
 
+        livenessProbe:
+          initialDelaySeconds: 15
+          failureThreshold: 6
+        readinessProbe:
+          initialDelaySeconds: 15
+          failureThreshold: 6
+
         # Teste do exporter datadog (trial) — DD_API_KEY vem do vault-homelab via
         # ExternalSecret (secrets/externalsecret-datadog.yaml), mesmo padrao do
         # resto do repo.
