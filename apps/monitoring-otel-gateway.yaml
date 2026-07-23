@@ -98,7 +98,16 @@ spec:
                 enabled: true
             # Teste de trial — site US1 (padrão de conta nova); trocar pra
             # datadoghq.eu se o trial cair em EU1.
+            #
+            # hostname fixo: sem isso o exporter tenta autodetectar via cadeia
+            # de cloud providers (azure/ecs/ec2/gcp/k8s/system) — o check de
+            # EC2 IMDS (169.254.169.254) não existe nesse cluster e não recusa
+            # conexão, só deixa a porta pendurada (~5s de timeout), estourando
+            # o liveness probe do chart antes do collector terminar de subir.
             datadog:
+              hostname: otel-gateway-lab
+              host_metadata:
+                enabled: false
               api:
                 key: ${env:DD_API_KEY}
                 site: datadoghq.com
