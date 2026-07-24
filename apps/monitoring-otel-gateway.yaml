@@ -91,13 +91,13 @@ spec:
                   statements:
                     - set(attributes["deployment.environment"], "dev") where IsMatch(attributes["k8s.namespace.name"], "-dev$")
                     - set(attributes["deployment.environment"], "hml") where IsMatch(attributes["k8s.namespace.name"], "-hml$")
-                    - set(attributes["deployment.environment"], "prd") where IsMatch(attributes["k8s.namespace.name"], "-prd$")
+                    - set(attributes["deployment.environment"], "prd") where IsMatch(attributes["k8s.namespace.name"], "-(prd|prod)$")
               metric_statements:
                 - context: resource
                   statements:
                     - set(attributes["deployment.environment"], "dev") where IsMatch(attributes["k8s.namespace.name"], "-dev$")
                     - set(attributes["deployment.environment"], "hml") where IsMatch(attributes["k8s.namespace.name"], "-hml$")
-                    - set(attributes["deployment.environment"], "prd") where IsMatch(attributes["k8s.namespace.name"], "-prd$")
+                    - set(attributes["deployment.environment"], "prd") where IsMatch(attributes["k8s.namespace.name"], "-(prd|prod)$")
             # Deriva peer.service e kind pro Service Graph.
             transform/peer:
               error_mode: ignore
