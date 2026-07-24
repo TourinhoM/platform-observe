@@ -86,6 +86,9 @@ spec:
               name: grafana
               user: grafana
               password: $__env{GF_DATABASE_PASSWORD}
+            tracing.opentelemetry.otlp:
+              address: otel-gateway.monitoring.svc.cluster.local:4317
+              propagation: w3c
 
           lifecycle:
             postStart:
